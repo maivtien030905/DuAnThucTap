@@ -1,86 +1,90 @@
+import google.generativeai as genai
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
-from shapely.geometry import shape, Point
+import logging
+from shapely.geometry import shape
 
-app = FastAPI()
-
-# Cho phép Frontend (file HTML) giao tiếp được với Backend mà không bị chặn
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+# 1. CẤU HÌNH TẠO FILE NHẬT KÝ (LOG) THEO YÊU CẦU GIẢNG VIÊN
+logging.basicConfig(
+    filename="nhat_ky_ai.txt", 
+    level=logging.INFO, 
+    format="%(asctime)s | CÂU HỎI: %(message)s", 
+    encoding="utf-8"
 )
 
-# Nạp dữ liệu từ file JSON vào bộ nhớ
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Nạp dữ liệu
 with open("data.json", "r", encoding="utf-8") as f:
     du_lieu = json.load(f)
 
-# --- HÀM 1: LỌC THỬA THEO ĐIỀU KIỆN ---
-@app.get("/api/loc_thua")
-def loc_thua(cay_trong: str = None, do_am_duoi: float = None):
-    ket_qua = []
-    for f in du_lieu["features"]:
-        if f["geometry"]["type"] == "Polygon":
-            props = f["properties"]
-            thoa_man = True
-            
-            # Lọc theo cây trồng (chuyển về chữ thường để so sánh)
-            if cay_trong and props["cay_trong"].lower() != cay_trong.lower():
-                thoa_man = False
-            # Lọc theo độ ẩm
-            if do_am_duoi and props["do_am"] >= do_am_duoi:
-                thoa_man = False
-                
-            if thoa_man:
-                ket_qua.append(props)
-    return {"data": ket_qua}
+# Biến tạm để lưu ID thửa đất sau khi AI gọi hàm
+danh_sach_id_tim_duoc = []
 
-# --- HÀM 2: TÌM CỰC TRỊ (Cao nhất / Thấp nhất) ---
-@app.get("/api/thua_cuc_tri")
+# --- 2. ĐỊNH NGHĨA CÁC CÔNG CỤ (TOOLS) CHO AI SỬ DỤNG ---
+
+def loc_thua(cay_trong: str = ""):
+    """Tìm hoặc lọc các thửa đất dựa theo tên loại cây trồng (Lúa, Rau, Ngô, Khoai, Cây ăn quả)."""
+    global danh_sach_id_tim_duoc
+    ket_qua = [f["properties"] for f in du_lieu["features"] if f["geometry"]["type"] == "Polygon" and cay_trong.lower() in f["properties"]["cay_trong"].lower()]
+    danh_sach_id_tim_duoc = [k["id"] for k in ket_qua]
+    logging.info(f"AI đã gọi hàm [loc_thua] với tham số: cay_trong='{cay_trong}' -> Tìm thấy {len(ket_qua)} thửa.")
+    return ket_qua
+
 def thua_cuc_tri(thuoc_tinh: str, loai: str):
-    # thuoc_tinh có thể là "do_am", "nhiet_do", "dien_tich"
-    # loai là "min" hoặc "max"
-    danh_sach_thua = [f for f in du_lieu["features"] if f["geometry"]["type"] == "Polygon"]
-    
-    if not danh_sach_thua:
-        return {"data": []}
+    """Tìm thửa đất có giá trị cao nhất (max) hoặc thấp nhất (min) của một thuộc tính (như: do_am, nhiet_do, dien_tich)."""
+    global danh_sach_id_tim_duoc
+    danh_sach = [f["properties"] for f in du_lieu["features"] if f["geometry"]["type"] == "Polygon"]
+    ket_qua = max(danh_sach, key=lambda x: x[thuoc_tinh]) if loai == "max" else min(danh_sach, key=lambda x: x[thuoc_tinh])
+    danh_sach_id_tim_duoc = [ket_qua["id"]]
+    logging.info(f"AI đã gọi hàm [thua_cuc_tri] với tham số: thuoc_tinh='{thuoc_tinh}', loai='{loai}' -> Kết quả: {ket_qua['ten']}.")
+    return [ket_qua]
 
-    if loai == "max":
-        thua_tim_duoc = max(danh_sach_thua, key=lambda x: x["properties"][thuoc_tinh])
-    else:
-        thua_tim_duoc = min(danh_sach_thua, key=lambda x: x["properties"][thuoc_tinh])
-        
-    return {"data": [thua_tim_duoc["properties"]]}
-
-# --- HÀM 3: TÌM THỬA ĐẤT GẦN ĐIỂM MỐC ---
-@app.get("/api/thua_gan_moc")
 def thua_gan_moc(loai_moc: str, ban_kinh_met: float):
-    # 1 độ GPS xấp xỉ 111,000 mét. Ta dùng hệ số này để quy đổi đơn giản.
-    HE_SO_QUY_DOI = 111000 
+    """Tìm các thửa đất nằm gần một mốc (gieng hoặc nha_kho) trong phạm vi bán kính (mét) cho trước."""
+    global danh_sach_id_tim_duoc
+    HE_SO_QUY_DOI = 111000
     ket_qua = []
+    moc_geom = next((shape(f["geometry"]) for f in du_lieu["features"] if f["geometry"]["type"] == "Point" and f["properties"]["loai"] == loai_moc), None)
     
-    # 1. Tìm tọa độ của điểm mốc (gieng hoặc nha_kho)
-    moc_geom = None
-    for f in du_lieu["features"]:
-        if f["geometry"]["type"] == "Point" and f["properties"]["loai"] == loai_moc:
-            moc_geom = shape(f["geometry"])
-            break
-            
-    if not moc_geom:
-        return {"error": "Không tìm thấy điểm mốc này"}
+    if moc_geom:
+        for f in du_lieu["features"]:
+            if f["geometry"]["type"] == "Polygon":
+                if (moc_geom.distance(shape(f["geometry"])) * HE_SO_QUY_DOI) <= ban_kinh_met:
+                    ket_qua.append(f["properties"])
+                    
+    danh_sach_id_tim_duoc = [k["id"] for k in ket_qua]
+    logging.info(f"AI đã gọi hàm [thua_gan_moc] với tham số: loai_moc='{loai_moc}', ban_kinh='{ban_kinh_met}m' -> Tìm thấy {len(ket_qua)} thửa.")
+    return ket_qua
 
-    # 2. Đo khoảng cách từ điểm mốc đến các thửa đất bằng thư viện Shapely
-    for f in du_lieu["features"]:
-        if f["geometry"]["type"] == "Polygon":
-            thua_geom = shape(f["geometry"])
-            khoang_cach_do = moc_geom.distance(thua_geom)
-            khoang_cach_met = khoang_cach_do * HE_SO_QUY_DOI
-            
-            if khoang_cach_met <= ban_kinh_met:
-                props = f["properties"].copy()
-                props["khoang_cach_thuc_te"] = round(khoang_cach_met, 2)
-                ket_qua.append(props)
-                
-    return {"data": ket_qua}
+# --- 3. CẤU HÌNH GEMINI AI ---
+genai.configure(api_key="AIzaSyBxxxxxxx_Ma_Key_Cua_Ban_xxxxxxx")
+model = genai.GenerativeModel(
+    model_name='gemini-1.5-flash',
+    tools=[loc_thua, thua_cuc_tri, thua_gan_moc], # Cấp cho AI 3 công cụ này
+    system_instruction="Bạn là Trợ lý AI Bản đồ Nông nghiệp. Hãy dùng các công cụ (tools) được cấp để tìm dữ liệu, sau đó trả lời người nông dân một cách ngắn gọn, thân thiện bằng tiếng Việt."
+)
+
+class ChatRequest(BaseModel):
+    message: str
+
+# --- 4. API LẮNG NGHE CHAT TỪ FRONTEND ---
+@app.post("/api/chat")
+def chat_voi_ai(req: ChatRequest):
+    global danh_sach_id_tim_duoc
+    danh_sach_id_tim_duoc = [] # Reset lại ID mỗi lần hỏi
+    
+    # Ghi nhận câu hỏi vào file log
+    logging.info(f"Người dùng hỏi: '{req.message}'")
+    
+    # Khởi động chat và cho phép AI tự động gọi hàm
+    chat = model.start_chat(enable_automatic_function_calling=True)
+    response = chat.send_message(req.message)
+    
+    return {
+        "reply": response.text, 
+        "ids": danh_sach_id_tim_duoc
+    }
