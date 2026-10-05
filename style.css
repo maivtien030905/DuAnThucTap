@@ -4,11 +4,49 @@ body {
   display: flex;
   height: 100vh;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #e8f5e9;
 }
 
 #map {
   width: 70%;
   height: 100%;
+  position: relative;
+}
+
+/* Hiệu ứng Kính mờ (Glassmorphism) cho bảng điều khiển */
+/* Giao diện Kính mờ (Glassmorphism) cho bảng điều khiển */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85); /* Nền trắng trong suốt */
+  backdrop-filter: blur(10px); /* Làm mờ ảnh vệ tinh phía sau */
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 15px;
+}
+
+#dashboard {
+  position: absolute;
+  top: 15px;
+  left: 60px; /* Đẩy sang phải để không đè lên nút +/- của bản đồ */
+  z-index: 1000; /* Quan trọng: Giúp bảng nổi lên trên cùng */
+  width: 250px;
+}
+
+#dashboard h3 { 
+  margin: 0 0 10px 0; 
+  color: #2e7d32; 
+  font-size: 16px; 
+  border-bottom: 2px solid #a5d6a7; 
+  padding-bottom: 8px;
+}
+
+.stats p { 
+  margin: 5px 0; 
+  font-size: 14px; 
+  color: #333; 
+  display: flex; 
+  justify-content: space-between; /* Đẩy chữ và số sang 2 bên */
 }
 
 #chat-container {
@@ -16,39 +54,47 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #f8f9fa;
-  border-left: 2px solid #ddd;
+  background-color: #ffffff;
+  box-shadow: -5px 0 15px rgba(0,0,0,0.05);
 }
 
 #chat-header {
-  background-color: #2e7d32;
+  background: linear-gradient(135deg, #43a047, #2e7d32);
   color: white;
-  padding: 15px;
+  padding: 20px;
+  font-size: 18px;
   font-weight: bold;
   text-align: center;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 #chat-box {
   flex: 1;
-  padding: 15px;
+  padding: 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
+  background-color: #f4f6f8;
 }
 
 .message {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 15px;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
 }
 
 .user-msg {
   align-self: flex-end;
-  background-color: #e3f2fd;
-  color: #0d47a1;
+  background-color: #dcedc8;
+  color: #33691e;
+  border-bottom-right-radius: 2px;
 }
 
 .bot-msg {
@@ -56,33 +102,116 @@ body {
   background-color: #ffffff;
   color: #333;
   border: 1px solid #e0e0e0;
+  border-bottom-left-radius: 2px;
 }
+
+.bot-icon { color: #2e7d32; font-size: 18px; margin-top: 2px; }
 
 #chat-input-area {
   display: flex;
-  padding: 10px;
+  padding: 15px;
   background-color: white;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid #eee;
+  gap: 10px;
+  align-items: center;
 }
 
 #user-input {
   flex: 1;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 20px;
   outline: none;
+  font-size: 14px;
+  background-color: #f9f9f9;
 }
 
+#user-input:focus { border-color: #43a047; background-color: #fff; }
+
+/* Nút Gửi */
 #send-btn {
-  margin-left: 8px;
-  padding: 10px 16px;
   background-color: #2e7d32;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
   cursor: pointer;
+  transition: 0.2s;
+}
+#send-btn:hover { background-color: #1b5e20; transform: scale(1.05); }
+
+/* Nút Micro và hiệu ứng nhấp nháy khi nói */
+#mic-btn {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+#mic-btn:hover { background-color: #f57c00; transform: scale(1.05); }
+#mic-btn.recording {
+  animation: pulse 1.5s infinite;
+  background-color: #f44336;
 }
 
-#send-btn:hover {
-  background-color: #1b5e20;
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+}
+
+/* Sửa lỗi giao diện Legend khi Google Dịch chạy */
+.info.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+}
+.legend-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #aaa;
+}
+/* --- THANH LỌC NHANH (QUICK FILTER) --- */
+#quick-filter {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%); /* Căn giữa hoàn hảo */
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  padding: 10px 15px;
+  border-radius: 30px; /* Bo cong điệu đà */
+}
+
+#quick-filter button {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(46, 125, 50, 0.4);
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #2e7d32;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+#quick-filter button:hover {
+  background: #2e7d32;
+  color: white;
+  transform: translateY(-2px); /* Hiệu ứng nảy lên nhẹ */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }

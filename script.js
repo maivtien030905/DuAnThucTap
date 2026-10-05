@@ -1,146 +1,204 @@
-// 1. Khởi tạo bản đồ Leaflet
-const map = L.map('map').setView([19.9734, 105.9358], 17);
+// Khai báo 2 loại bản đồ (Vệ tinh và Đường phố)
+const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '© Esri Vệ tinh'
+});
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap'
+});
 
-// Bản đồ vệ tinh Esri World Imagery
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: '© Esri &mdash; Dữ liệu vệ tinh'
-}).addTo(map);
+// Khởi tạo bản đồ, bật sẵn Vệ tinh và nút Fullscreen
+const map = L.map('map', {
+  center: [19.9754, 105.9546],
+  zoom: 16,
+  layers: [satLayer], // Bản đồ mặc định
+  fullscreenControl: true // Bật nút phóng to toàn màn hình
+});
 
+// Thêm nút chuyển đổi 2 lớp bản đồ ở góc trên bên phải
+const baseMaps = {
+  "Bản đồ Vệ tinh": satLayer,
+  "Bản đồ Địa hình": streetLayer
+};
+L.control.layers(baseMaps).addTo(map);
+
+// (Giữ nguyên các đoạn code từ biến geojsonLayer trở đi...)
 let geojsonLayer;
 const SERVER_API = "http://127.0.0.1:8000";
 
-// Style mặc định phân màu theo cây trồng
+// BẢNG CHÚ GIẢI (LEGEND) CHỐNG LỖI GOOGLE DỊCH
+const legend = L.control({ position: 'bottomright' });
+legend.onAdd = function () {
+  const div = L.DomUtil.create('div', 'info legend glass-panel');
+  div.innerHTML = `
+    <h4 style="margin: 0 0 10px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Loại cây</h4>
+    <div class="legend-item"><div class="legend-color" style="background:#ffeb3b"></div> <span>Lúa</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#4caf50"></div> <span>Rau</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#ff9800"></div> <span>Cây ăn quả</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#8bc34a"></div> <span>Ngô</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#795548"></div> <span>Khoai</span></div>
+  `;
+  return div;
+};
+legend.addTo(map);
+
 function styleMacDinh(feature) {
   if (feature.geometry.type === "Point") return {};
-  
-  let mauNen = '#ffffff'; 
-  let cay = feature.properties.cay_trong;
-  
+  let mauNen = '#ffffff', cay = feature.properties.cay_trong;
   if (cay === 'Lúa') mauNen = '#ffeb3b';
   else if (cay === 'Rau') mauNen = '#4caf50';
   else if (cay === 'Cây ăn quả') mauNen = '#ff9800';
   else if (cay === 'Ngô') mauNen = '#8bc34a';
   else if (cay === 'Khoai') mauNen = '#795548';
   
-  return {
-    fillColor: mauNen,
-    weight: 2, 
-    opacity: 1,
-    color: 'white', 
-    dashArray: '4',
-    fillOpacity: 0.55
-  };
+  return { fillColor: mauNen, weight: 2, color: 'white', dashArray: '4', fillOpacity: 0.6 };
 }
 
-// Nạp dữ liệu lên bản đồ
 geojsonLayer = L.geoJSON(du_lieu_nong_trai, {
   style: styleMacDinh,
   onEachFeature: function (feature, layer) {
-    if (feature.properties) {
-      let popupContent = `<b>${feature.properties.ten || "Điểm mốc"}</b><br>`;
-      if (feature.properties.cay_trong) popupContent += `Cây trồng: ${feature.properties.cay_trong}<br>`;
-      if (feature.properties.dien_tich) popupContent += `Diện tích: ${feature.properties.dien_tich} m²<br>`;
-      if (feature.properties.do_am) popupContent += `Độ ẩm: ${feature.properties.do_am}%<br>`;
-      layer.bindPopup(popupContent);
+    if (feature.properties && feature.geometry.type !== "Point") {
+      layer.bindPopup(`<b>${feature.properties.ten}</b><br>Cây: ${feature.properties.cay_trong}<br>DT: ${feature.properties.dien_tich}m²<br>Độ ẩm: ${feature.properties.do_am}%`);
     }
   }
 }).addTo(map);
 
-// 2. Logic xử lý Chat
-function themTinNhan(text, sender) {
+// --- PHẦN MỚI 1: TÍNH TOÁN DASHBOARD VÀ VẼ BIỂU ĐỒ ---
+function khoiTaoThongKe() {
+  let tongThua = 0, tongDienTich = 0, tongDoAm = 0;
+  let thongKeCay = { "Lúa": 0, "Rau": 0, "Cây ăn quả": 0, "Ngô": 0, "Khoai": 0 };
+
+  du_lieu_nong_trai.features.forEach(f => {
+    if (f.geometry.type === "Polygon") {
+      tongThua++;
+      tongDienTich += f.properties.dien_tich;
+      tongDoAm += f.properties.do_am;
+      if(thongKeCay[f.properties.cay_trong] !== undefined) thongKeCay[f.properties.cay_trong]++;
+    }
+  });
+
+  document.getElementById('tong-thua').innerText = tongThua;
+  document.getElementById('tong-dt').innerText = tongDienTich.toLocaleString();
+  document.getElementById('tb-doam').innerText = tongThua > 0 ? Math.round(tongDoAm / tongThua) : 0;
+
+  // Vẽ biểu đồ tròn Chart.js
+  const ctx = document.getElementById('cropChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(thongKeCay),
+      datasets: [{
+        data: Object.values(thongKeCay),
+        backgroundColor: ['#ffeb3b', '#4caf50', '#ff9800', '#8bc34a', '#795548']
+      }]
+    },
+    options: { plugins: { legend: { display: false } }, maintainAspectRatio: false }
+  });
+}
+khoiTaoThongKe();
+
+// --- PHẦN MỚI 2: NHẬN DIỆN GIỌNG NÓI (VOICE SEARCH) ---
+const micBtn = document.getElementById('mic-btn');
+const inputField = document.getElementById('user-input');
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = 'vi-VN';
+  recognition.continuous = false;
+  
+  recognition.onstart = function() {
+    micBtn.classList.add('recording');
+    inputField.placeholder = "Đang nghe bạn nói...";
+  };
+  
+  recognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    inputField.value = transcript;
+    xuLyCauHoi(); // Gửi câu hỏi ngay sau khi nói xong
+  };
+  
+  recognition.onend = function() {
+    micBtn.classList.remove('recording');
+    inputField.placeholder = "Nhắn tin hoặc bấm Mic để nói...";
+  };
+}
+
+function batDauGhiAm() {
+  if (recognition) recognition.start();
+  else alert("Trình duyệt của bạn không hỗ trợ tính năng giọng nói (Hãy dùng Google Chrome).");
+}
+
+// --- LOGIC CHAT VÀ ZOOM BẢN ĐỒ CŨ ---
+function themTinNhan(text, sender, msgId = null) {
   const chatBox = document.getElementById('chat-box');
   const msgDiv = document.createElement('div');
   msgDiv.className = `message ${sender}-msg`;
-  msgDiv.innerText = text;
+  if (msgId) msgDiv.id = msgId;
+  
+  if (sender === 'bot') {
+    msgDiv.innerHTML = `<i class="fas fa-seedling bot-icon"></i> <span>${text}</span>`;
+  } else {
+    msgDiv.innerText = text;
+  }
+  
   chatBox.appendChild(msgDiv);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 async function xuLyCauHoi() {
-  const input = document.getElementById('user-input');
-  const text = input.value.trim();
+  const text = inputField.value.trim();
   if (!text) return;
-
   themTinNhan(text, 'user');
-  input.value = '';
-  const textLower = text.toLowerCase();
+  inputField.value = '';
+
+  const loadingId = "loading-" + Date.now();
+  themTinNhan("⏳ Đang phân tích dữ liệu...", 'bot', loadingId);
 
   try {
-    let responseData = [];
-    let botReply = "";
-
-    if (textLower.includes("lúa") || textLower.includes("rau") || textLower.includes("cây ăn quả") || textLower.includes("ngô") || textLower.includes("khoai")) {
-      let cay = "Lúa";
-      if (textLower.includes("rau")) cay = "Rau";
-      if (textLower.includes("cây ăn quả")) cay = "Cây ăn quả";
-      if (textLower.includes("ngô")) cay = "Ngô";
-      if (textLower.includes("khoai")) cay = "Khoai";
-
-      const res = await fetch(`${SERVER_API}/api/loc_thua?cay_trong=${encodeURIComponent(cay)}`);
-      const json = await res.json();
-      responseData = json.data;
-      botReply = `Tìm thấy ${responseData.length} thửa trồng ${cay}: ${responseData.map(t => t.ten).join(', ')}`;
-    }
-    else if (textLower.includes("khô") || textLower.includes("thấp nhất")) {
-      const res = await fetch(`${SERVER_API}/api/thua_cuc_tri?thuoc_tinh=do_am&loai=min`);
-      const json = await res.json();
-      responseData = json.data;
-      botReply = `Thửa có độ ẩm thấp nhất là ${responseData[0].ten} (${responseData[0].do_am}%).`;
-    }
-    else if (textLower.includes("rộng nhất") || textLower.includes("lớn nhất")) {
-      const res = await fetch(`${SERVER_API}/api/thua_cuc_tri?thuoc_tinh=dien_tich&loai=max`);
-      const json = await res.json();
-      responseData = json.data;
-      botReply = `Thửa rộng nhất là ${responseData[0].ten} (${responseData[0].dien_tich} m²).`;
-    }
-    else if (textLower.includes("giếng") || textLower.includes("gần giếng")) {
-      const res = await fetch(`${SERVER_API}/api/thua_gan_moc?loai_moc=gieng&ban_kinh_met=150`);
-      const json = await res.json();
-      responseData = json.data;
-      botReply = `Các thửa nằm trong bán kính 150m gần giếng tưới: ${responseData.map(t => t.ten).join(', ')}`;
-    }
-    else {
-      botReply = "Xin lỗi, tôi chưa hiểu rõ ý bạn. Bạn hãy thử hỏi: 'Thửa nào trồng ngô?', 'Thửa nào rộng nhất?' hoặc 'Thửa nào gần giếng?'";
-    }
-
-    themTinNhan(botReply, 'bot');
-    highlightThuaDat(responseData.map(item => item.id));
-
-  } catch (err) {
-    themTinNhan("Lỗi kết nối tới server Backend! Bạn đã chạy 'uvicorn main:app --reload' chưa?", 'bot');
-  }
-}
-
-// 3. Xử lý câu hỏi người dùng (Gửi thẳng cho AI xử lý)
-async function xuLyCauHoi() {
-  const input = document.getElementById('user-input');
-  const text = input.value.trim();
-  if (!text) return;
-
-  themTinNhan(text, 'user');
-  input.value = '';
-
-  try {
-    // Gọi API Chat POST đến Backend Python
     const res = await fetch(`${SERVER_API}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text })
     });
-    
     const data = await res.json();
-    
-    // In câu trả lời tự nhiên của AI ra màn hình
+    document.getElementById(loadingId).remove();
     themTinNhan(data.reply, 'bot');
-    
-    // Tự động highlight và zoom tới các thửa đất AI tìm được
-    highlightThuaDat(data.ids);
-
+    if (data.ids && data.ids.length > 0) highlightThuaDat(data.ids);
   } catch (err) {
-    themTinNhan("Lỗi! Hãy kiểm tra xem Backend đã chạy và bạn đã nhập API Key Google chưa nhé.", 'bot');
+    document.getElementById(loadingId).remove();
+    themTinNhan("❌ Lỗi kết nối tới Server AI.", 'bot');
   }
 }
 
-document.getElementById('user-input').addEventListener('keypress', function(e) {
+function highlightThuaDat(danhSachId) {
+  let bounds = L.latLngBounds();
+  let coKetQua = false;
+  geojsonLayer.eachLayer(layer => {
+    if (layer.feature.geometry.type !== "Point") {
+      if (danhSachId.includes(layer.feature.properties.id)) {
+        layer.setStyle({ fillColor: '#ff1744', color: '#ffffff', weight: 4, fillOpacity: 0.8 });
+        layer.openPopup();
+        bounds.extend(layer.getBounds());
+        coKetQua = true;
+      } else {
+        geojsonLayer.resetStyle(layer);
+      }
+    }
+  });
+  if (coKetQua) map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5 });
+}
+
+inputField.addEventListener('keypress', function(e) {
   if (e.key === 'Enter') xuLyCauHoi();
 });
+// --- PHẦN MỚI 3: LOGIC THANH LỌC NHANH ---
+function bamNutLocNhanh(cauHoi) {
+  const inputField = document.getElementById('user-input');
+  
+  // Điền câu hỏi vào khung chat
+  inputField.value = cauHoi;
+  
+  // Gọi hàm xử lý chat của AI ngay lập tức
+  xuLyCauHoi(); 
+}

@@ -3,33 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trợ lý AI Nông nghiệp</title>
+  <title>Trợ lý AI Nông nghiệp Pro</title>
 
-  <!-- Thư viện Leaflet CSS & JS -->
+  <!-- Leaflet, FontAwesome & Chart.js -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/Leaflet.fullscreen.min.js"></script>
+  <link href="https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/leaflet.fullscreen.css" rel="stylesheet" />
   
-  <!-- Nạp file CSS của bạn -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div id="map"></div>
+  <!-- Đưa Dashboard VÀO TRONG Map để nó nổi lên trên -->
+  <div id="map">
+    
+    <div id="dashboard" class="glass-panel">
+      <h3><i class="fas fa-chart-pie"></i> Tổng quan Nông trại</h3>
+      <div class="stats">
+        <p>Số thửa: <b id="tong-thua">0</b></p>
+        <p>Diện tích: <b id="tong-dt">0</b> m²</p>
+        <p>Độ ẩm TB: <b id="tb-doam">0</b>%</p>
+      </div>
+      <!-- Bọc canvas bằng thẻ div để chống lỗi sập biểu đồ (mặt buồn) -->
+      <div style="position: relative; height: 160px; width: 100%; margin-top: 15px;">
+        <canvas id="cropChart"></canvas>
+      </div>
+    </div>
+
+  </div> <!-- Kết thúc thẻ map -->
 
   <div id="chat-container">
-    <div id="chat-header">Trợ lý Bản đồ Nông nghiệp AI</div>
+    <div id="chat-header">
+      <i class="fas fa-robot"></i> Trợ lý AI Nông nghiệp
+    </div>
     <div id="chat-box">
-      <div class="message bot-msg">Xin chào! Bạn có thể hỏi tôi về vị trí thửa đất, độ ẩm, hoặc khoảng cách đến giếng tưới/nhà kho.</div>
+      <div class="message bot-msg">
+        <i class="fas fa-seedling bot-icon"></i> 
+        <span>Xin chào! Bấm vào biểu tượng Micro bên dưới để nói chuyện trực tiếp với tôi nhé.</span>
+      </div>
     </div>
     <div id="chat-input-area">
-      <input type="text" id="user-input" placeholder="Nhập câu hỏi... (VD: thửa nào trồng lúa?)">
-      <button id="send-btn" onclick="xuLyCauHoi()">Gửi</button>
+      <button id="mic-btn" onclick="batDauGhiAm()" title="Tìm kiếm bằng giọng nói">
+        <i class="fas fa-microphone"></i>
+      </button>
+      <input type="text" id="user-input" placeholder="Nhắn tin hoặc bấm Mic để nói...">
+      <button id="send-btn" onclick="xuLyCauHoi()">
+        <i class="fas fa-paper-plane"></i>
+      </button>
+    </div>
+    <div id="quick-filter" class="glass-panel">
+      <button onclick="bamNutLocNhanh('Thửa nào trồng Lúa?')">🌾 Lọc Lúa</button>
+      <button onclick="bamNutLocNhanh('Thửa nào trồng Rau?')">🥬 Lọc Rau</button>
+      <button onclick="bamNutLocNhanh('Thửa nào đang khô nhất?')">💧 Khô nhất</button>
+      <button onclick="bamNutLocNhanh('Thửa nào rộng nhất?')">📐 Rộng nhất</button>
     </div>
   </div>
 
-  <!-- Nạp file dữ liệu và logic JS -->
   <script src="data.js"></script>
   <script src="script.js"></script>
-
 </body>
 </html>
